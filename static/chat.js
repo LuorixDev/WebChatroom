@@ -60,7 +60,7 @@ function insertAtCursor(textarea, text) {
 }
 
 // 渲染消息
-function renderMessages(messages, prepend = false) {
+function renderMessages(messages, prepend = false, autoScroll = false) {
     const fragment = document.createDocumentFragment();
     messages.forEach(msg => {
         const div = document.createElement('div');
@@ -79,6 +79,11 @@ function renderMessages(messages, prepend = false) {
         chatHistory.insertBefore(fragment, chatHistory.firstChild);
     } else {
         chatHistory.appendChild(fragment);
+    }
+    if (autoScroll) {
+        requestAnimationFrame(() => {
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        });
     }
 }
 
@@ -132,11 +137,8 @@ async function sendMessage() {
         });
         const data = await res.json();
         if (data.success) {
-            renderMessages([data.message]);
-            messageInput.value = '';
-            setTimeout(() => {
-                chatHistory.scrollTop = chatHistory.scrollHeight;
-            }, 0);
+        renderMessages([data.message], false, true);
+        messageInput.value = '';
         } else {
             alert(data.error || '发送失败');
         }
@@ -150,9 +152,11 @@ async function sendMessage() {
 chatHistory.addEventListener('scroll', () => {
     if (chatHistory.scrollTop === 0 && hasMore && !loading) {
         const oldHeight = chatHistory.scrollHeight;
-        loadHistory(true).then(() => {
+loadHistory(true).then(() => {
             // 保持滚动位置
-            chatHistory.scrollTop = chatHistory.scrollHeight - oldHeight;
+            setTimeout(() => {
+                chatHistory.scrollTop = chatHistory.scrollHeight - oldHeight;
+            }, 0);
         });
     }
 });
@@ -183,17 +187,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     const res = await fetch(`/${encodeURIComponent(room)}/history?page=1`);
     const data = await res.json();
     if (data.messages && data.messages.length > 0) {
-        renderMessages(data.messages.reverse());
+        renderMessages(data.messages.reverse(), false, true);
         page = 2;
         hasMore = data.has_next;
-        // 渲染后立即滚动到底部
-        setTimeout(() => {
-            chatHistory.scrollTop = chatHistory.scrollHeight;
-        }, 0);
     } else {
-        setTimeout(() => {
+        requestAnimationFrame(() => {
             chatHistory.scrollTop = chatHistory.scrollHeight;
-        }, 0);
+        });
     }
 
     // 心跳包定时器
