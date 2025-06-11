@@ -67,23 +67,49 @@ def onlinecount(name):
 def room(name):
     return render_template('room.html', room=name)
 
-# 聊天历史分页接口（倒序，每页10条）
+# 聊天历史接口：支持分页获取最新历史（默认）、获取since_id之后的新消息、获取before_id之前的历史
 @app.route('/<name>/history')
 def history(name):
-    try:
-        page = int(request.args.get('page', 1))
-    except:
-        page = 1
-    per_page = 10
-    query = Message.query.filter_by(room=name).order_by(Message.id.desc())
-    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-    messages = [msg.to_dict() for msg in pagination.items]
-    return jsonify({
-        'messages': messages,
-        'has_next': pagination.has_next,
-        'has_prev': pagination.has_prev,
-        'total': pagination.total
-    })
+    since_id = request.args.get('since_id', type=int)
+    before_id = request.args.get('before_id', type=int) # 新增参数
+
+    per_page = 10 # 每页数量
+
+    if since_id is not None:
+        # 获取since_id之后的新消息
+        messages = Message.query.filter_by(room=name).filter(Message.id > since_id).order_by(Message.id.asc()).all()
+        return jsonify({
+            'messages': [msg.to_dict() for msg in messages],
+            'has_next': False, # 获取新消息时没有分页概念
+            'has_prev': False,
+            'total': len(messages)
+        })
+    elif before_id is not None:
+        # 获取before_id之前的历史消息 (分页)
+        query = Message.query.filter_by(room=name).filter(Message.id < before_id).order_by(Message.id.desc())
+        pagination = query.paginate(page=1, per_page=per_page, error_out=False) # 对于before_id，总是获取第一页
+        messages = [msg.to_dict() for msg in pagination.items]
+        return jsonify({
+            'messages': messages,
+            'has_next': pagination.has_next,
+            'has_prev': pagination.has_prev,
+            'total': pagination.total
+        })
+    else:
+        # 首次加载或分页获取最新历史消息 (倒序)
+        try:
+            page = int(request.args.get('page', 1))
+        except:
+            page = 1
+        query = Message.query.filter_by(room=name).order_by(Message.id.desc())
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        messages = [msg.to_dict() for msg in pagination.items]
+        return jsonify({
+            'messages': messages,
+            'has_next': pagination.has_next,
+            'has_prev': pagination.has_prev,
+            'total': pagination.total
+        })
 
 # 发送消息接口
 @app.route('/<name>/send', methods=['POST'])
