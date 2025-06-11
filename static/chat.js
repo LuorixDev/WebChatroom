@@ -166,6 +166,17 @@ messageInput.addEventListener('keydown', e => {
     }
 });
 
+// 生成唯一client_id（每个页面唯一，刷新/新开页不同）
+function getClientId() {
+    let cid = sessionStorage.getItem('chat_client_id');
+    if (!cid) {
+        // Use timestamp + random number to ensure uniqueness
+        cid = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        sessionStorage.setItem('chat_client_id', cid);
+    }
+    return cid;
+}
+
 // 初始加载全部历史
 window.addEventListener('DOMContentLoaded', async () => {
     // 首次加载第一页历史，reverse 保证顺序旧→新
@@ -184,4 +195,19 @@ window.addEventListener('DOMContentLoaded', async () => {
             chatHistory.scrollTop = chatHistory.scrollHeight;
         }, 0);
     }
+
+    // 心跳包定时器
+    const client_id = getClientId();
+    fetch(`/${encodeURIComponent(room)}/heartbeat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client_id }),
+    });
+    setInterval(() => {
+        fetch(`/${encodeURIComponent(room)}/heartbeat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ client_id })
+        });
+    }, 10000);
 });

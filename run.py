@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 
 app = Flask(__name__)
@@ -28,6 +28,37 @@ class Message(db.Model):
             'content': self.content,
             'timestamp': self.timestamp.strftime('%Y-%m-%d %H:%M:%S')
         }
+
+# 心跳模型
+class Heartbeat(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    room = db.Column(db.String(64), index=True)
+    client_id = db.Column(db.String(64), index=True)
+    last_beat = db.Column(db.DateTime, default=datetime.utcnow)
+
+# 心跳包接口
+@app.route('/<name>/heartbeat', methods=['POST'])
+def heartbeat(name):
+    data = request.json
+    client_id = data.get('client_id', '').strip()
+    if not client_id:
+        return jsonify({'success': False, 'error': '缺少client_id'}), 400
+    hb = Heartbeat.query.filter_by(room=name, client_id=client_id).first()
+    now = datetime.utcnow()
+    if hb:
+        hb.last_beat = now
+    else:
+        hb = Heartbeat(room=name, client_id=client_id, last_beat=now)
+        db.session.add(hb)
+    db.session.commit()
+    return jsonify({'success': True})
+
+# 在线人数接口
+@app.route('/<name>/onlinecount')
+def onlinecount(name):
+    threshold = datetime.utcnow() - timedelta(seconds=30)
+    count = Heartbeat.query.filter_by(room=name).filter(Heartbeat.last_beat >= threshold).count()
+    return jsonify({'online': count})
 
 
 
@@ -78,4 +109,7 @@ if __name__ == '__main__':
     if not os.path.exists('chatroom.db'):
         with app.app_context():
             db.create_all()
+    # 确保心跳表存在
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)
