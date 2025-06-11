@@ -5,6 +5,7 @@ import os
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Index
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+from flask import g # 导入g对象
 
 app = Flask(__name__)
 CORS(app)
@@ -39,38 +40,39 @@ class Heartbeat(Base):
     last_beat = Column(DateTime, default=datetime.utcnow)
 
 # 动态获取数据库会话
+# 动态获取数据库会话
 def get_db_session(room_name):
-    db_dir = 'instance'
-    if not os.path.exists(db_dir):
-        os.makedirs(db_dir)
-    db_path = os.path.join(db_dir, f'{room_name}.db')
-    db_uri = f'sqlite:///{db_path}'
-    engine = create_engine(db_uri)
-    Base.metadata.create_all(engine) # 确保表存在
-    Session = sessionmaker(bind=engine)
-    return Session()
+    # 检查g对象是否已经存在session
+    if 'db_session' not in g:
+        db_dir = 'instance'
+        if not os.path.exists(db_dir):
+            os.makedirs(db_dir)
+        db_path = os.path.join(db_dir, f'{room_name}.db')
+        db_uri = f'sqlite:///{db_path}'
+        engine = create_engine(db_uri)
+        Base.metadata.create_all(engine) # 确保表存在
+        Session = sessionmaker(bind=engine)
+        g.db_session = Session() # 将session存储在g对象中
+    return g.db_session
 
 # 在请求结束后关闭数据库会话
 @app.teardown_request
 def remove_session(exception=None):
-    # 尝试从g对象获取session，如果存在则关闭
-    session = getattr(app, '_current_db_session', None)
-    if session:
+    # 从g对象获取session，如果存在则关闭
+    session = g.pop('db_session', None)
+    if session is not None:
         session.close()
-        delattr(app, '_current_db_session')
 
 
 # 心跳包接口
 @app.route('/<name>/heartbeat', methods=['POST'])
 def heartbeat(name):
     session = get_db_session(name)
-    # 将session存储在g对象中，以便在teardown_request中访问和关闭
-    setattr(app, '_current_db_session', session)
 
     data = request.json
     client_id = data.get('client_id', '').strip()
     if not client_id:
-        session.close() # 提前关闭session
+        # session将在teardown_request中关闭，这里不需要提前关闭
         return jsonify({'success': False, 'error': '缺少client_id'}), 400
 
     # 删除超时的心跳包记录
@@ -93,7 +95,6 @@ def heartbeat(name):
 @app.route('/<name>/onlinecount')
 def onlinecount(name):
     session = get_db_session(name)
-    setattr(app, '_current_db_session', session)
 
     threshold = datetime.utcnow() - timedelta(seconds=30)
     count = session.query(Heartbeat).filter_by(room=name).filter(Heartbeat.last_beat >= threshold).count()
@@ -110,7 +111,6 @@ def room(name):
 @app.route('/<name>/history')
 def history(name):
     session = get_db_session(name)
-    setattr(app, '_current_db_session', session)
 
     since_id = request.args.get('since_id', type=int)
     before_id = request.args.get('before_id', type=int)
@@ -172,14 +172,13 @@ def history(name):
 @app.route('/<name>/send', methods=['POST'])
 def send(name):
     session = get_db_session(name)
-    setattr(app, '_current_db_session', session)
 
     data = request.json
     nickname = data.get('nickname', '').strip()
     email = data.get('email', '').strip()
     content = data.get('content', '').strip()
     if not (nickname and email and content):
-        session.close() # 提前关闭session
+        # session将在teardown_request中关闭，这里不需要提前关闭
         return jsonify({'success': False, 'error': '参数不完整'}), 400
 
     msg = Message(room=name, nickname=nickname, email=email, content=content)
