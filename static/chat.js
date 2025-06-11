@@ -71,9 +71,13 @@ function renderMessages(messages, prepend = false) { // Removed autoScroll param
     // Markdown 渲染并防 XSS
     const html = DOMPurify.sanitize(marked.parse(msg.content || ""));
     div.innerHTML = `<div class="chat-meta">
-            <span class="chat-nick">${msg.nickname}</span>
-            <span class="chat-email"><${msg.email}></span>
-            <span class="chat-time">${msg.timestamp}</span>
+            <span class="message-number">#${
+              msg.id
+            }</span><span class="chat-nick">${msg.nickname}</span>
+            <span class="chat-email">&lt;${msg.email}&gt;</span>
+            <span class="chat-time">${new Date(
+              msg.timestamp + " UTC"
+            ).toLocaleString()}</span>
         </div>
         <div class="chat-content">${html}</div>`;
     fragment.appendChild(div);

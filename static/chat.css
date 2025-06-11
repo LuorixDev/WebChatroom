@@ -73,6 +73,12 @@ body {
     font-size: 0.78em;
     margin-bottom: 1px;
 }
+.message-number {
+    color: #888; /* 灰色 */
+    font-size: 0.8em; /* 较小字体 */
+    margin-right: 4px; /* 与昵称之间留白 */
+}
+
 .chat-nick {
     font-weight: bold;
     color: #2563eb;
