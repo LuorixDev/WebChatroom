@@ -134,7 +134,9 @@ async function sendMessage() {
         if (data.success) {
             renderMessages([data.message]);
             messageInput.value = '';
-            chatHistory.scrollTop = chatHistory.scrollHeight;
+            setTimeout(() => {
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            }, 0);
         } else {
             alert(data.error || '发送失败');
         }
@@ -174,8 +176,12 @@ window.addEventListener('DOMContentLoaded', async () => {
         page = 2;
         hasMore = data.has_next;
         // 渲染后立即滚动到底部
-        chatHistory.scrollTop = chatHistory.scrollHeight;
+        setTimeout(() => {
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }, 0);
     } else {
-        chatHistory.scrollTop = chatHistory.scrollHeight;
+        setTimeout(() => {
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }, 0);
     }
 });
