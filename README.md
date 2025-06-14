@@ -8,6 +8,16 @@
 
 这是一个轻量级的网页聊天室应用，后端使用 Python Flask 框架，前端使用 HTML、CSS 和原生 JavaScript。数据存储采用 SQLite 数据库，每个聊天室对应一个独立的数据库文件。项目实现了基本的聊天功能，包括发送消息、加载历史消息（支持分页和上拉加载）、以及一个简易的在线人数统计（通过心跳包实现）。
 
+[![](example/example.png)]([超链接地址](https://webchatroom.dimeta.top/githubreadme/room]))
+
+---
+
+## 在线 Demo
+
+你可以访问以下地址体验在线 Demo：
+
+[https://webchatroom.dimeta.top/githubreadme/room](https://webchatroom.dimeta.top/githubreadme/room)
+
 ---
 
 ## 主要特性
