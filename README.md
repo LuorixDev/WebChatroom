@@ -2,9 +2,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.x-blue.svg) ![Flask](https://img.shields.io/badge/flask-framework-blue.svg) ![License](https://img.shields.io/badge/license-MIT%20or%20Apache%202.0-blue.svg)
 
-
 一个基于 Flask 和 SQLite 的简单网页聊天室应用。
-<iframe src="https://webchatroom.dimeta.top/githubreadme/room" width="800" height="600"></iframe>
 
 ## 项目简介
 
