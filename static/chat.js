@@ -94,6 +94,7 @@ chatHistory.addEventListener("click", async (e) => {
   if (e.target.classList.contains("delete-btn")) {
     const messageId = e.target.dataset.id;
     const email = localStorage.getItem("chat_email");
+    const deviceId = getDeviceId();
     if (!email) {
       alert("请先设置您的邮箱");
       return;
@@ -101,7 +102,7 @@ chatHistory.addEventListener("click", async (e) => {
     const res = await fetch(`/${encodeURIComponent(room)}/delete/${messageId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email }),
+      body: JSON.stringify({ email: email, device_id: deviceId }),
     });
     const data = await res.json();
     if (data.success) {

@@ -249,11 +249,17 @@ def confirm_email(token):
 @app.route('/<name>/delete/<int:message_id>', methods=['POST'])
 def delete_message(name, message_id):
     session = get_db_session(name)
+    user_session = get_user_db_session()
     data = request.json
     admin_email = data.get('email', '').strip()
+    device_id = data.get('device_id', '').strip()
 
     if admin_email != config.ADMIN_EMAIL:
         return jsonify({'success': False, 'error': '无权限'}), 403
+
+    verified_device = user_session.query(VerifiedDevice).filter_by(device_id=device_id, email=admin_email).first()
+    if not verified_device:
+        return jsonify({'success': False, 'error': '管理员设备未验证'}), 403
 
     msg = session.query(Message).filter_by(id=message_id, room=name).first()
     if msg:
