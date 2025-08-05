@@ -72,13 +72,11 @@ function renderMessages(messages, prepend = false) {
     div.innerHTML = `<div class="chat-meta">
             <span class="message-number">#${msg.id}</span>
             <span class="chat-nick">${msg.nickname}</span>
-            <span class="chat-email"><${msg.email}></span>
+            <span class="chat-email">&lt;${msg.email}&gt;</span>
             <span class="chat-time">${new Date(
               msg.timestamp + " UTC"
             ).toLocaleString()}</span>
-            <button class="delete-btn" data-id="${
-              msg.id
-            }">删除</button>
+            <button class="delete-btn" data-id="${msg.id}">删除</button>
         </div>
         <div class="chat-content">${html}</div>`;
     fragment.appendChild(div);
