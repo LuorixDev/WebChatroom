@@ -1,0 +1,5 @@
+Flask
+Flask-Cors
+SQLAlchemy
+Flask-Mail
+itsdangerous

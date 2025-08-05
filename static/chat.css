@@ -95,6 +95,21 @@ body {
     font-size: 0.85em;
     margin-left: auto;
 }
+
+.delete-btn {
+    background: none;
+    border: none;
+    color: #ff4d4f;
+    cursor: pointer;
+    font-size: 0.9em;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.chat-message:hover .delete-btn {
+    opacity: 1;
+}
+
 .chat-content {
     margin-top: 1px;
     color: #222;

@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>验证成功</title>
+    <script>
+        window.onload = function() {
+            // Set a flag in localStorage to indicate that verification was successful.
+            // The original chat window will listen for this change.
+            localStorage.setItem('device_verified_{{ token }}', 'true');
+            window.close(); // Close this window
+        };
+    </script>
+</head>
+<body>
+    <h1>验证成功！</h1>
+    <p>此窗口将自动关闭。</p>
+</body>
+</html>

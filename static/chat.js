@@ -62,22 +62,23 @@ function insertAtCursor(textarea, text) {
 }
 
 // 渲染消息
-function renderMessages(messages, prepend = false) { // Removed autoScroll parameter
+function renderMessages(messages, prepend = false) {
   const fragment = document.createDocumentFragment();
   messages.forEach((msg) => {
     const div = document.createElement("div");
     div.className = "chat-message";
-    div.dataset.messageId = msg.id; // 添加数据属性存储消息ID
-    // Markdown 渲染并防 XSS
+    div.dataset.messageId = msg.id;
     const html = DOMPurify.sanitize(marked.parse(msg.content || ""));
     div.innerHTML = `<div class="chat-meta">
-            <span class="message-number">#${
-              msg.id
-            }</span><span class="chat-nick">${msg.nickname}</span>
-            <span class="chat-email">&lt;${msg.email}&gt;</span>
+            <span class="message-number">#${msg.id}</span>
+            <span class="chat-nick">${msg.nickname}</span>
+            <span class="chat-email"><${msg.email}></span>
             <span class="chat-time">${new Date(
               msg.timestamp + " UTC"
             ).toLocaleString()}</span>
+            <button class="delete-btn" data-id="${
+              msg.id
+            }">删除</button>
         </div>
         <div class="chat-content">${html}</div>`;
     fragment.appendChild(div);
@@ -87,8 +88,31 @@ function renderMessages(messages, prepend = false) { // Removed autoScroll param
   } else {
     chatHistory.appendChild(fragment);
   }
-  // Removed scrolling logic
 }
+
+chatHistory.addEventListener("click", async (e) => {
+  if (e.target.classList.contains("delete-btn")) {
+    const messageId = e.target.dataset.id;
+    const email = localStorage.getItem("chat_email");
+    if (!email) {
+      alert("请先设置您的邮箱");
+      return;
+    }
+    const res = await fetch(`/${encodeURIComponent(room)}/delete/${messageId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      document
+        .querySelector(`.chat-message[data-message-id='${messageId}']`)
+        .remove();
+    } else {
+      alert(data.error || "删除失败");
+    }
+  }
+});
 
 async function loadMessages({
   type = "initial",
@@ -100,11 +124,13 @@ async function loadMessages({
 
   // Capture scroll state BEFORE fetching/rendering
   const oldScrollHeight = chatHistory.scrollHeight;
-  const isUserAtBottomBeforeFetch = chatHistory.scrollHeight - chatHistory.scrollTop <= chatHistory.clientHeight + 50; // 50px threshold
+  const isUserAtBottomBeforeFetch =
+    chatHistory.scrollHeight - chatHistory.scrollTop <=
+    chatHistory.clientHeight + 50; // 50px threshold
 
   // Set loading to true only for 'initial' and 'older' types
   if (type === "initial" || type === "older") {
-      loading = true;
+    loading = true;
   }
 
   let url = `/${encodeURIComponent(room)}/history`;
@@ -114,7 +140,8 @@ async function loadMessages({
   } else if (type === "older") {
     url += `?before_id=${beforeId}`;
     console.log(`Fetching older messages before ID: ${beforeId}`); // Debug log
-  } else { // type === 'initial'
+  } else {
+    // type === 'initial'
     url += `?page=1`; // Initial load still uses page 1 for the newest batch
     console.log(`Fetching initial messages (page 1)`); // Debug log
   }
@@ -123,7 +150,10 @@ async function loadMessages({
     const res = await fetch(url);
     const data = await res.json();
     if (data.messages && data.messages.length > 0) {
-      console.log(`Fetched messages (${type}):`, data.messages.map(msg => msg.id)); // Debug log
+      console.log(
+        `Fetched messages (${type}):`,
+        data.messages.map((msg) => msg.id)
+      ); // Debug log
       if (type === "older") {
         // For older messages, they are fetched in desc order, reverse to prepend in asc order
         renderMessages(data.messages.reverse(), true); // Prepend
@@ -133,14 +163,17 @@ async function loadMessages({
         requestAnimationFrame(() => {
           chatHistory.scrollTop = chatHistory.scrollHeight - oldScrollHeight;
         });
-
-      } else { // 'initial' or 'new'
+      } else {
+        // 'initial' or 'new'
         let msgsToRender = data.messages;
         if (type === "initial") {
           // For initial load, messages are fetched newest first (desc),
           // but we want to render them oldest first to appear at the bottom correctly.
           msgsToRender = msgsToRender.reverse();
-          console.log("Initial messages (rendered order):", msgsToRender.map(msg => msg.id)); // Debug log
+          console.log(
+            "Initial messages (rendered order):",
+            msgsToRender.map((msg) => msg.id)
+          ); // Debug log
         }
 
         renderMessages(msgsToRender, false); // Append
@@ -160,7 +193,7 @@ async function loadMessages({
           });
         } else if (type === "new" && isUserAtBottomBeforeFetch) {
           // Scroll to bottom for new messages ONLY if user was at bottom before fetch
-           requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
             chatHistory.scrollTop = chatHistory.scrollHeight;
           });
         }
@@ -176,7 +209,7 @@ async function loadMessages({
   } finally {
     // Always set loading to false for 'initial' and 'older' types
     if (type === "initial" || type === "older") {
-        loading = false;
+      loading = false;
     }
   }
 }
@@ -223,10 +256,21 @@ chatHistory.addEventListener("scroll", () => {
 function validateEmail(email) {
   return /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(email);
 }
+
+function getDeviceId() {
+  let deviceId = localStorage.getItem("chat_device_id");
+  if (!deviceId) {
+    deviceId = Date.now() + "-" + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem("chat_device_id", deviceId);
+  }
+  return deviceId;
+}
+
 async function sendMessage() {
   const nickname = nicknameInput.value.trim();
   const email = emailInput.value.trim();
   const content = messageInput.value.trim();
+  const deviceId = getDeviceId();
   if (!nickname || !email || !content) {
     alert("请填写昵称、邮箱和消息");
     return;
@@ -243,12 +287,25 @@ async function sendMessage() {
     const res = await fetch(`/${encodeURIComponent(room)}/send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname, email, content }),
+      body: JSON.stringify({ nickname, email, content, device_id: deviceId }),
     });
     const data = await res.json();
     if (data.success) {
-      // renderMessages([data.message], false, true); // 不再立即渲染发送的消息
       messageInput.value = "";
+    } else if (res.status === 401) {
+        alert("新设备需要邮件验证，请检查您的邮箱。");
+        const verificationToken = data.token;
+        const storageKey = `device_verified_${verificationToken}`;
+
+        const listener = (e) => {
+            if (e.key === storageKey && e.newValue === 'true') {
+                localStorage.removeItem(storageKey);
+                window.removeEventListener('storage', listener);
+                sendMessage(); // Retry sending the message
+            }
+        };
+        window.addEventListener('storage', listener);
+
     } else {
       alert(data.error || "发送失败");
     }
@@ -257,7 +314,6 @@ async function sendMessage() {
   }
   sendBtn.disabled = false;
 }
-
 
 // 发送按钮事件
 sendBtn.addEventListener("click", sendMessage);
@@ -283,7 +339,6 @@ function getClientId() {
 window.addEventListener("DOMContentLoaded", async () => {
   // 首次加载最新一批历史消息 (page 1)
   await loadMessages({ type: "initial" }); // 使用新的loadMessages函数
-
 
   // 心跳包定时器
   const client_id = getClientId();

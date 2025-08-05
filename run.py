@@ -1,17 +1,31 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_from_directory, url_for
 from flask_cors import CORS
 from datetime import datetime, timedelta
 import os
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Index
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-from flask import g # 导入g对象
+from flask import g
+from flask_mail import Mail, Message as MailMessage
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
+import config
 
 app = Flask(__name__)
+app.config.from_pyfile('config.py')
+
 CORS(app)
+mail = Mail(app)
+s = URLSafeTimedSerializer(app.config['SECRET_KEY'])
 
 # 定义数据库模型
 Base = declarative_base()
+UserBase = declarative_base()
+
+class VerifiedDevice(UserBase):
+    __tablename__ = 'verified_devices'
+    id = Column(Integer, primary_key=True)
+    email = Column(String(128), index=True)
+    device_id = Column(String(128), unique=True)
 
 class Message(Base):
     __tablename__ = 'messages'
@@ -39,7 +53,19 @@ class Heartbeat(Base):
     client_id = Column(String(64), index=True)
     last_beat = Column(DateTime, default=datetime.utcnow)
 
-# 动态获取数据库会话
+def get_user_db_session():
+    if 'user_db_session' not in g:
+        db_dir = 'instance'
+        if not os.path.exists(db_dir):
+            os.makedirs(db_dir)
+        db_path = os.path.join(db_dir, 'users.db')
+        db_uri = f'sqlite:///{db_path}'
+        engine = create_engine(db_uri)
+        UserBase.metadata.create_all(engine)
+        Session = sessionmaker(bind=engine)
+        g.user_db_session = Session()
+    return g.user_db_session
+
 # 动态获取数据库会话
 def get_db_session(room_name):
     # 检查g对象是否已经存在session
@@ -62,6 +88,9 @@ def remove_session(exception=None):
     session = g.pop('db_session', None)
     if session is not None:
         session.close()
+    user_session = g.pop('user_db_session', None)
+    if user_session is not None:
+        user_session.close()
 
 
 # 心跳包接口
@@ -172,20 +201,66 @@ def history(name):
 @app.route('/<name>/send', methods=['POST'])
 def send(name):
     session = get_db_session(name)
-
+    user_session = get_user_db_session()
     data = request.json
     nickname = data.get('nickname', '').strip()
     email = data.get('email', '').strip()
     content = data.get('content', '').strip()
-    if not (nickname and email and content):
-        # session将在teardown_request中关闭，这里不需要提前关闭
+    device_id = data.get('device_id', '').strip()
+
+    if not (nickname and email and content and device_id):
         return jsonify({'success': False, 'error': '参数不完整'}), 400
+
+    verified_device = user_session.query(VerifiedDevice).filter_by(device_id=device_id).first()
+    if not verified_device:
+        token = s.dumps({'email': email, 'device_id': device_id, 'room': name}, salt='email-confirm')
+        confirm_url = url_for('confirm_email', token=token, _external=True)
+        html = render_template('verify_email.html', confirm_url=confirm_url)
+        subject = "请确认您的新设备"
+        msg = MailMessage(subject, recipients=[email], html=html)
+        mail.send(msg)
+        return jsonify({'success': False, 'error': '需要邮件验证', 'token': token}), 401
 
     msg = Message(room=name, nickname=nickname, email=email, content=content)
     session.add(msg)
     session.commit()
-    # session将在teardown_request中关闭
     return jsonify({'success': True, 'message': msg.to_dict()})
+
+@app.route('/confirm/<token>')
+def confirm_email(token):
+    try:
+        data = s.loads(token, salt='email-confirm', max_age=3600)
+        email = data['email']
+        device_id = data['device_id']
+        
+        user_session = get_user_db_session()
+        # Check if the device_id is already in the database, regardless of email.
+        existing_device = user_session.query(VerifiedDevice).filter_by(device_id=device_id).first()
+        if not existing_device:
+            # If the device is not verified for any email, add it.
+            new_device = VerifiedDevice(email=email, device_id=device_id)
+            user_session.add(new_device)
+            user_session.commit()
+
+        return render_template('verification_success.html', token=token)
+    except (SignatureExpired, BadTimeSignature):
+        return "验证链接无效或已过期。"
+
+@app.route('/<name>/delete/<int:message_id>', methods=['POST'])
+def delete_message(name, message_id):
+    session = get_db_session(name)
+    data = request.json
+    admin_email = data.get('email', '').strip()
+
+    if admin_email != config.ADMIN_EMAIL:
+        return jsonify({'success': False, 'error': '无权限'}), 403
+
+    msg = session.query(Message).filter_by(id=message_id, room=name).first()
+    if msg:
+        session.delete(msg)
+        session.commit()
+        return jsonify({'success': True})
+    return jsonify({'success': False, 'error': '消息未找到'}), 404
 
 # 静态文件路由
 @app.route('/static/<path:filename>')
