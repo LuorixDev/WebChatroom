@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>聊天室创建请求</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #ddd; border-radius: 5px; background-color: #f9f9f9; }
+        .button { display: inline-block; padding: 10px 20px; margin: 10px 5px; color: #fff; text-decoration: none; border-radius: 5px; }
+        .approve { background-color: #28a745; }
+        .deny { background-color: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>聊天室创建请求</h2>
+        <p>您好，管理员！</p>
+        <p>有用户请求创建一个新的聊天室：<b>{{ room_name }}</b></p>
+        <p>请审核此请求：</p>
+        <a href="{{ approve_url }}" class="button approve">批准创建</a>
+        <a href="{{ deny_url }}" class="button deny">拒绝创建</a>
+        <p style="font-size: 12px; color: #888;">如果这不是您期望的操作，请忽略此邮件。</p>
+    </div>
+</body>
+</html>

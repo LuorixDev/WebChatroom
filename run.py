@@ -8,7 +8,9 @@ from sqlalchemy.ext.declarative import declarative_base
 from flask import g
 from flask_mail import Mail, Message as MailMessage
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
+import markdown
 import config
+import re
 
 app = Flask(__name__)
 app.config.from_pyfile('config.py')
@@ -26,6 +28,13 @@ class VerifiedDevice(UserBase):
     id = Column(Integer, primary_key=True)
     email = Column(String(128), index=True)
     device_id = Column(String(128), unique=True)
+
+class PendingRoom(UserBase):
+    __tablename__ = 'pending_rooms'
+    id = Column(Integer, primary_key=True)
+    room_name = Column(String(64), unique=True, index=True)
+    status = Column(String(20), default='pending') # pending, approved, denied
+    timestamp = Column(DateTime, default=datetime.utcnow)
 
 class Message(Base):
     __tablename__ = 'messages'
@@ -67,19 +76,29 @@ def get_user_db_session():
     return g.user_db_session
 
 # 动态获取数据库会话
-def get_db_session(room_name):
+def get_db_session(room_name, create_if_not_exist=True):
     # 检查g对象是否已经存在session
     if 'db_session' not in g:
         db_dir = 'instance'
+        db_path = os.path.join(db_dir, f'{room_name}.db')
+        
+        if not os.path.exists(db_path) and not create_if_not_exist:
+            return None
+
         if not os.path.exists(db_dir):
             os.makedirs(db_dir)
-        db_path = os.path.join(db_dir, f'{room_name}.db')
+            
         db_uri = f'sqlite:///{db_path}'
         engine = create_engine(db_uri)
         Base.metadata.create_all(engine) # 确保表存在
         Session = sessionmaker(bind=engine)
         g.db_session = Session() # 将session存储在g对象中
     return g.db_session
+
+def is_room_approved(room_name):
+    """Check if a room's database file exists."""
+    db_path = os.path.join('instance', f'{room_name}.db')
+    return os.path.exists(db_path)
 
 # 在请求结束后关闭数据库会话
 @app.teardown_request
@@ -96,6 +115,8 @@ def remove_session(exception=None):
 # 心跳包接口
 @app.route('/<name>/heartbeat', methods=['POST'])
 def heartbeat(name):
+    if not is_room_approved(name):
+        return jsonify({'success': False, 'error': 'Room not found or not approved'}), 404
     session = get_db_session(name)
 
     data = request.json
@@ -123,6 +144,8 @@ def heartbeat(name):
 # 在线人数接口
 @app.route('/<name>/onlinecount')
 def onlinecount(name):
+    if not is_room_approved(name):
+        return jsonify({'online': 0})
     session = get_db_session(name)
 
     threshold = datetime.utcnow() - timedelta(seconds=30)
@@ -133,12 +156,51 @@ def onlinecount(name):
 # 聊天室页面
 @app.route('/<name>/room')
 def room(name):
-    # 这个路由不直接访问数据库，所以不需要获取session
-    return render_template('room.html', room=name)
+    if is_room_approved(name):
+        return render_template('room.html', room=name)
+
+    if not app.config.get('REQUIRE_ROOM_CREATION_APPROVAL'):
+        get_db_session(name) # This will create the room
+        return render_template('room.html', room=name)
+    
+    user_session = get_user_db_session()
+    pending_room = user_session.query(PendingRoom).filter_by(room_name=name).first()
+
+    if not pending_room:
+        new_pending_room = PendingRoom(room_name=name)
+        user_session.add(new_pending_room)
+        user_session.commit()
+
+        try:
+            admin_email = app.config.get('ADMIN_EMAIL')
+            if admin_email:
+                token_data = {'room_name': name}
+                approve_token = s.dumps(token_data, salt='approve-room')
+                deny_token = s.dumps(token_data, salt='deny-room')
+
+                approve_url = url_for('approve_room', token=approve_token, _external=True)
+                deny_url = url_for('deny_room', token=deny_token, _external=True)
+
+                html_body = render_template(
+                    'room_approval_email.html',
+                    room_name=name,
+                    approve_url=approve_url,
+                    deny_url=deny_url
+                )
+                subject = f"请求创建新的聊天室: '{name}'"
+                msg = MailMessage(subject, recipients=[admin_email], html=html_body)
+                mail.send(msg)
+        except Exception as e:
+            app.logger.error(f"Failed to send room approval email: {e}")
+
+    return render_template('pending_approval.html', room_name=name)
+
 
 # 聊天历史接口：支持分页获取最新历史（默认）、获取since_id之后的新消息、获取before_id之前的历史
 @app.route('/<name>/history')
 def history(name):
+    if not is_room_approved(name):
+        return jsonify({'messages': [], 'total': 0})
     session = get_db_session(name)
 
     since_id = request.args.get('since_id', type=int)
@@ -200,6 +262,8 @@ def history(name):
 # 发送消息接口
 @app.route('/<name>/send', methods=['POST'])
 def send(name):
+    if not is_room_approved(name):
+        return jsonify({'success': False, 'error': 'Room not found or not approved'}), 404
     session = get_db_session(name)
     user_session = get_user_db_session()
     data = request.json
@@ -211,6 +275,43 @@ def send(name):
     if not (nickname and email and content and device_id):
         return jsonify({'success': False, 'error': '参数不完整'}), 400
 
+    # --- Reply and Content Processing ---
+    # Step 1: Find original authors to notify, using original content
+    try:
+        replied_to_ids = set(re.findall(r'#(\d+)#', content))
+        authors_to_notify = []
+        for msg_id in replied_to_ids:
+            original_message = session.query(Message).filter_by(id=int(msg_id)).first()
+            if original_message and original_message.email != email:
+                authors_to_notify.append(original_message.email)
+    except Exception as e:
+        app.logger.error(f"Error finding reply authors: {e}")
+        authors_to_notify = []
+
+    # Step 2: Transform content for storage and display (replace #123# with HTML)
+    processed_content = re.sub(r'#(\d+)#', r'<span style="color: blue;">#\1#</span>', content)
+
+    # Step 3: Send reply notifications using the processed content
+    if authors_to_notify:
+        try:
+            subject = f"您在聊天室 '{name}' 中有新的回复"
+            # The markdown library will safely handle the HTML span tag
+            reply_content_html = markdown.markdown(processed_content)
+            room_url = url_for('room', name=name, _external=True)
+            html_body = render_template(
+                'reply_notification_email.html',
+                room_name=name,
+                replier_nickname=nickname,
+                reply_content_html=reply_content_html,
+                room_url=room_url
+            )
+            # Use set to avoid sending multiple emails to the same person if they are replied to multiple times
+            mail_msg = MailMessage(subject, recipients=list(set(authors_to_notify)), html=html_body)
+            mail.send(mail_msg)
+        except Exception as e:
+            app.logger.error(f"Failed to send reply notification email: {e}")
+
+
     verified_device = user_session.query(VerifiedDevice).filter_by(device_id=device_id).first()
     if not verified_device:
         token = s.dumps({'email': email, 'device_id': device_id, 'room': name}, salt='email-confirm')
@@ -221,9 +322,34 @@ def send(name):
         mail.send(msg)
         return jsonify({'success': False, 'error': '需要邮件验证', 'token': token}), 401
 
-    msg = Message(room=name, nickname=nickname, email=email, content=content)
+    msg = Message(room=name, nickname=nickname, email=email, content=processed_content) # Use processed content
     session.add(msg)
     session.commit()
+
+    # Send notification email to admin if enabled
+    if app.config.get('SEND_NOTIFICATION_EMAIL'):
+        try:
+            admin_email = app.config.get('ADMIN_EMAIL')
+            if admin_email:
+                subject = f"聊天室 '{name}' 有新消息"
+                # Convert processed content from Markdown to HTML
+                message_html = markdown.markdown(processed_content)
+                room_url = url_for('room', name=name, _external=True)
+                # Render the email template
+                html_body = render_template(
+                    'notification_email.html',
+                    room_name=name,
+                    nickname=nickname,
+                    email=email,
+                    message_html=message_html,
+                    room_url=room_url
+                )
+                mail_msg = MailMessage(subject, recipients=[admin_email], html=html_body)
+                mail.send(mail_msg)
+        except Exception as e:
+            # Log the error but don't block the user's request
+            app.logger.error(f"Failed to send notification email: {e}")
+
     return jsonify({'success': True, 'message': msg.to_dict()})
 
 @app.route('/confirm/<token>')
@@ -246,15 +372,64 @@ def confirm_email(token):
     except (SignatureExpired, BadTimeSignature):
         return "验证链接无效或已过期。"
 
+@app.route('/approve_room/<token>')
+def approve_room(token):
+    user_session = get_user_db_session()
+    try:
+        data = s.loads(token, salt='approve-room', max_age=3600 * 24) # 24 hours to approve
+        room_name = data['room_name']
+        
+        pending_room = user_session.query(PendingRoom).filter_by(room_name=room_name).first()
+        if not pending_room:
+            return render_template('room_creation_result.html', success=False, message="请求不存在或已处理。")
+
+        if pending_room.status == 'approved':
+            room_url = url_for('room', name=room_name, _external=True)
+            return render_template('room_creation_result.html', success=True, message=f"聊天室 '{room_name}' 已被批准。", room_url=room_url)
+
+        # Create the room database
+        get_db_session(room_name, create_if_not_exist=True)
+        
+        pending_room.status = 'approved'
+        user_session.commit()
+        
+        room_url = url_for('room', name=room_name, _external=True)
+        return render_template('room_creation_result.html', success=True, message=f"聊天室 '{room_name}' 已成功创建。", room_url=room_url)
+
+    except (SignatureExpired, BadTimeSignature):
+        return render_template('room_creation_result.html', success=False, message="批准链接无效或已过期。")
+
+@app.route('/deny_room/<token>')
+def deny_room(token):
+    user_session = get_user_db_session()
+    try:
+        data = s.loads(token, salt='deny-room', max_age=3600 * 24)
+        room_name = data['room_name']
+
+        pending_room = user_session.query(PendingRoom).filter_by(room_name=room_name).first()
+        if not pending_room:
+            return render_template('room_creation_result.html', success=False, message="请求不存在或已处理。")
+
+        pending_room.status = 'denied'
+        user_session.commit()
+        
+        return render_template('room_creation_result.html', success=True, message=f"已拒绝创建聊天室 '{room_name}'。")
+
+    except (SignatureExpired, BadTimeSignature):
+        return render_template('room_creation_result.html', success=False, message="拒绝链接无效或已过期。")
+
+
 @app.route('/<name>/delete/<int:message_id>', methods=['POST'])
 def delete_message(name, message_id):
+    if not is_room_approved(name):
+        return jsonify({'success': False, 'error': 'Room not found or not approved'}), 404
     session = get_db_session(name)
     user_session = get_user_db_session()
     data = request.json
-    admin_email = data.get('email', '').strip()
+    admin_email = data.get('email', '').strip().lower()
     device_id = data.get('device_id', '').strip()
 
-    if admin_email != config.ADMIN_EMAIL:
+    if admin_email != config.ADMIN_EMAIL.lower():
         return jsonify({'success': False, 'error': '无权限'}), 403
 
     verified_device = user_session.query(VerifiedDevice).filter_by(device_id=device_id, email=admin_email).first()

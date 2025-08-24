@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>操作结果</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding-top: 50px; color: #333; }
+        .container { max-width: 600px; margin: auto; }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="{{ 'success' if success else 'error' }}">{{ message }}</h1>
+        {% if room_url %}
+            <p>您可以点击以下链接访问聊天室：</p>
+            <a href="{{ room_url }}">{{ room_url }}</a>
+        {% endif %}
+    </div>
+</body>
+</html>

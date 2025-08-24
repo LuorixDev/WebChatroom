@@ -3,6 +3,12 @@ import os
 # Admin email
 ADMIN_EMAIL = "your_admin_email@example.com"
 
+# Whether to send email notifications to the admin for new messages
+SEND_NOTIFICATION_EMAIL = True
+
+# Whether new chat rooms require admin approval via email
+REQUIRE_ROOM_CREATION_APPROVAL = True
+
 # Flask-Mail configuration
 # Example for Gmail:
 # MAIL_SERVER = 'smtp.gmail.com'

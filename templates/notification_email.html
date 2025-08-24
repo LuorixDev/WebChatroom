@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新消息提醒</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+            line-height: 1.6;
+            color: #333;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #e0e0e0;
+        }
+        .header {
+            background-color: #007bff;
+            color: #ffffff;
+            padding: 20px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .content {
+            padding: 30px;
+        }
+        .content p {
+            margin: 0 0 15px;
+        }
+        .message-box {
+            background-color: #f9f9f9;
+            border: 1px solid #eeeeee;
+            border-radius: 5px;
+            padding: 20px;
+            margin-top: 15px;
+        }
+        .footer {
+            background-color: #f4f4f4;
+            color: #888;
+            font-size: 12px;
+            text-align: center;
+            padding: 20px;
+        }
+        b {
+            color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>新消息提醒</h1>
+        </div>
+        <div class="content">
+            <p>您好，管理员！</p>
+            <p>聊天室 <a href="{{ room_url }}"><b>{{ room_name }}</b></a> 中有新消息。</p>
+            <p><b>发送者:</b> {{ nickname }} ({{ email }})</p>
+            <div class="message-box">
+                {{ message_html|safe }}
+            </div>
+            <p style="margin-top: 20px; text-align: center;">
+                <a href="{{ room_url }}" style="background-color: #007bff; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">点击返回聊天室</a>
+            </p>
+        </div>
+        <div class="footer">
+            <p>这是一封自动发送的通知邮件，请勿直接回复。</p>
+        </div>
+    </div>
+</body>
+</html>

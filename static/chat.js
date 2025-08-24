@@ -22,7 +22,7 @@ nicknameInput.addEventListener("change", () => {
   localStorage.setItem("chat_nick", nicknameInput.value.trim());
 });
 emailInput.addEventListener("change", () => {
-  localStorage.setItem("chat_email", emailInput.value.trim());
+  localStorage.setItem("chat_email", emailInput.value.trim().toLowerCase());
 });
 
 // 表情插入
@@ -267,7 +267,7 @@ function getDeviceId() {
 
 async function sendMessage() {
   const nickname = nicknameInput.value.trim();
-  const email = emailInput.value.trim();
+  const email = emailInput.value.trim().toLowerCase();
   const content = messageInput.value.trim();
   const deviceId = getDeviceId();
   if (!nickname || !email || !content) {
@@ -280,7 +280,7 @@ async function sendMessage() {
     return;
   }
   localStorage.setItem("chat_nick", nickname);
-  localStorage.setItem("chat_email", email);
+  localStorage.setItem("chat_email", email); // Already lowercased
   sendBtn.disabled = true;
   try {
     const res = await fetch(`/${encodeURIComponent(room)}/send`, {
@@ -323,24 +323,13 @@ messageInput.addEventListener("keydown", (e) => {
   }
 });
 
-// 生成唯一client_id（每个页面唯一，刷新/新开页不同）
-function getClientId() {
-  let cid = sessionStorage.getItem("chat_client_id");
-  if (!cid) {
-    // Use timestamp + random number to ensure uniqueness
-    cid = Date.now() + "-" + Math.random().toString(36).substr(2, 9);
-    sessionStorage.setItem("chat_client_id", cid);
-  }
-  return cid;
-}
-
 // 初始加载和定时刷新
 window.addEventListener("DOMContentLoaded", async () => {
   // 首次加载最新一批历史消息 (page 1)
   await loadMessages({ type: "initial" }); // 使用新的loadMessages函数
 
   // 心跳包定时器
-  const client_id = getClientId();
+  const client_id = getDeviceId(); // Use deviceId for heartbeat
   fetch(`/${encodeURIComponent(room)}/heartbeat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
