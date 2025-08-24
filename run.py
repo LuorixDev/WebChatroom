@@ -425,23 +425,26 @@ def delete_message(name, message_id):
         return jsonify({'success': False, 'error': 'Room not found or not approved'}), 404
     session = get_db_session(name)
     user_session = get_user_db_session()
+    msg = session.query(Message).filter_by(id=message_id, room=name).first()
+    
     data = request.json
     admin_email = data.get('email', '').strip().lower()
     device_id = data.get('device_id', '').strip()
-
-    if admin_email != config.ADMIN_EMAIL.lower():
-        return jsonify({'success': False, 'error': '无权限'}), 403
-
     verified_device = user_session.query(VerifiedDevice).filter_by(device_id=device_id, email=admin_email).first()
-    if not verified_device:
+    
+    if not verified_device :
         return jsonify({'success': False, 'error': '管理员设备未验证'}), 403
-
-    msg = session.query(Message).filter_by(id=message_id, room=name).first()
-    if msg:
+    
+    elif (admin_email.lower() != msg.email.lower()) and (admin_email.lower() != config.ADMIN_EMAIL.lower()) :
+        
+        return jsonify({'success': False, 'error': '无权限'}), 403
+    
+    elif msg :
         session.delete(msg)
         session.commit()
         return jsonify({'success': True})
-    return jsonify({'success': False, 'error': '消息未找到'}), 404
+    else:
+        return jsonify({'success': False, 'error': '消息未找到'}), 404
 
 # 静态文件路由
 @app.route('/static/<path:filename>')
