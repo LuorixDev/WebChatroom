@@ -436,7 +436,7 @@ def delete_message(name, message_id):
     if verified_device == False:
         return jsonify({'success': False, 'error': '管理员设备未验证'}), 403
     
-    elif (admin_email != msg.email.lower) and admin_email != config.ADMIN_EMAIL.lower() :
+    elif (admin_email.lower() != msg.email.lower()) and (admin_email.lower() != config.ADMIN_EMAIL.lower()) :
         return jsonify({'success': False, 'error': '无权限'}), 403
     
     elif msg :
