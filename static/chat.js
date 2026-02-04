@@ -293,8 +293,8 @@ async function sendMessage() {
       messageInput.value = "";
     } else if (res.status === 401) {
         alert("新设备需要邮件验证，请检查您的邮箱。");
-        const verificationToken = data.token;
-        const storageKey = `device_verified_${verificationToken}`;
+        const deviceId = data.device_id;
+        const storageKey = `device_verified_${deviceId}`;
 
         const listener = (e) => {
             if (e.key === storageKey && e.newValue === 'true') {

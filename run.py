@@ -320,7 +320,7 @@ def send(name):
         subject = "请确认您的新设备"
         msg = MailMessage(subject, recipients=[email], html=html)
         mail.send(msg)
-        return jsonify({'success': False, 'error': '需要邮件验证', 'token': token}), 401
+        return jsonify({'success': False, 'error': '需要邮件验证', 'device_id': device_id}), 401
 
     msg = Message(room=name, nickname=nickname, email=email, content=processed_content) # Use processed content
     session.add(msg)
