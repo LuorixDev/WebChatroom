@@ -368,7 +368,7 @@ def confirm_email(token):
             user_session.add(new_device)
             user_session.commit()
 
-        return render_template('verification_success.html', token=token)
+        return render_template('verification_success.html', device_id=device_id)
     except (SignatureExpired, BadTimeSignature):
         return "验证链接无效或已过期。"
 

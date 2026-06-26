@@ -6,9 +6,9 @@
         window.onload = function() {
             // Set a flag in localStorage to indicate that verification was successful.
             // The original chat window will listen for this change.
-            // We use device_id from the token data to notify the original window.
-            {% set data = s.loads(token, salt='email-confirm') %}
-            localStorage.setItem('device_verified_{{ data.device_id }}', 'true');
+            // We use device_id from the confirmed token to notify the original window.
+            const deviceId = {{ device_id|tojson }};
+            localStorage.setItem('device_verified_' + deviceId, 'true');
             window.close(); // Close this window
         };
     </script>
